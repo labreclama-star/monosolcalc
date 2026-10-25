@@ -1,1 +1,1104 @@
-pbpaste > index.html && git add . && git commit -m "Fixed PPM logic" && git push -f origin main && netlify deploy --prod --dir=.
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Мета-теги для превью в соцсетях и Телеграме -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://monosolcalc.netlify.app/" />
+    <meta property="og:title" content="Калькулятор удобрений из моносолей" />
+    <meta property="og:description" content="Профессиональный расчет навесок удобрений из простых солей для перцев, томатов и огурцов." />
+    <meta property="og:image" content="https://monosolcalc.netlify.app/preview_v2.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Калькулятор удобрений из моносолей" />
+    <meta name="twitter:description" content="Профессиональный расчет навесок удобрений из простых солей для перцев, томатов и огурцов." />
+    <meta name="twitter:image" content="https://monosolcalc.netlify.app/preview_v2.jpg" />
+
+    <title>Калькулятор удобрений из моносолей</title>
+    <meta name="claude:viewport-fit-sides" content="cover">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+    
+    <style>
+    /* Раскладка: слева параметры и список солей, справа результаты (на узких экранах — друг под другом).
+       Цвета: бак А — янтарный, бак Б — синий, статусы — зелёный / жёлтый / красный, акцент — морская волна. */
+    :root {
+      --bg: #eef1ee;
+      --surface: #f9fbf8;
+      --surface-2: #e5eae5;
+      --ink: #14211c;
+      --ink-2: #4a5a53;
+      --line: #cdd6cf;
+      --accent: #17696b;
+      --accent-ink: #ffffff;
+      --tank-a: #8f4f00;
+      --tank-a-bg: #f6e3c8;
+      --tank-b: #1f55a3;
+      --tank-b-bg: #d9e5f6;
+      --ok: #1d6f3a;
+      --ok-bg: #d8eedd;
+      --warn: #7a5700;
+      --warn-bg: #f6e8b8;
+      --bad: #a8231b;
+      --bad-bg: #f8d9d6;
+      --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+      --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0e1613;
+        --surface: #16211c;
+        --surface-2: #1f2d27;
+        --ink: #e6eee9;
+        --ink-2: #9db0a6;
+        --line: #2c3d35;
+        --accent: #4fc3bf;
+        --accent-ink: #06201f;
+        --tank-a: #f0b25e;
+        --tank-a-bg: #3a2a12;
+        --tank-b: #8db8f2;
+        --tank-b-bg: #172b47;
+        --ok: #6fd08c;
+        --ok-bg: #14301f;
+        --warn: #e8c35a;
+        --warn-bg: #3a3012;
+        --bad: #ff8f86;
+        --bad-bg: #43181a;
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0e1613;
+      --surface: #16211c;
+      --surface-2: #1f2d27;
+      --ink: #e6eee9;
+      --ink-2: #9db0a6;
+      --line: #2c3d35;
+      --accent: #4fc3bf;
+      --accent-ink: #06201f;
+      --tank-a: #f0b25e;
+      --tank-a-bg: #3a2a12;
+      --tank-b: #8db8f2;
+      --tank-b-bg: #172b47;
+      --ok: #6fd08c;
+      --ok-bg: #14301f;
+      --warn: #e8c35a;
+      --warn-bg: #3a3012;
+      --bad: #ff8f86;
+      --bad-bg: #43181a;
+      color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.5;
+      padding-block: 24px 32px;
+      padding-left: max(16px, env(safe-area-inset-left, 0px));
+      padding-right: max(16px, env(safe-area-inset-right, 0px));
+      margin: 0;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+    h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+    h1 { font-size: clamp(1.6rem, 4.5vw, 2.4rem); font-weight: 700; letter-spacing: -0.01em; }
+    h2 { font-size: 1.15rem; font-weight: 600; }
+    p { margin: 0; }
+    .lede { color: var(--ink-2); max-width: 62ch; margin-top: 6px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+    @media (min-width: 1000px) { .layout { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); } }
+    .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .hint { color: var(--ink-2); font-size: 13px; }
+
+    /* Поля ввода */
+    .params { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .fld > span { font-size: 12px; color: var(--ink-2); letter-spacing: 0.02em; }
+    input[type="number"], input[type="text"], select {
+      width: 100%; min-width: 0; font: inherit; color: var(--ink); background: var(--bg);
+      border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 40px;
+    }
+    input[type="number"] { font-family: var(--font-mono); font-size: 14px; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* Целевые ppm: плитки в духе таблицы элементов */
+    .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    .tile { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px 8px; display: flex; flex-direction: column; min-width: 0; }
+    .tile .z { font-family: var(--font-mono); font-size: 10px; color: var(--ink-2); }
+    .tile .sym { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; line-height: 1; }
+    .tile .val { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+
+    /* Карточки солей */
+    .salts { display: flex; flex-direction: column; gap: 10px; }
+    .salt { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+    .salt-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+    .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+    .fe-row { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
+    .fe-row .fld { width: 100px; }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 13px; min-height: 40px; }
+    .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+    button { font: inherit; cursor: pointer; border-radius: 6px; min-height: 40px; padding: 8px 14px; }
+    .btn-primary { background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); font-weight: 600; font-size: 16px; min-height: 48px; }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn-ghost { background: transparent; color: var(--ink); border: 1px dashed var(--ink-2); }
+    .btn-ghost:hover { background: var(--surface-2); }
+    .btn-del { background: transparent; color: var(--bad); border: 1px solid var(--line); }
+    .btn-del:hover { background: var(--bad-bg); }
+
+    /* Результаты */
+    .summary { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--ink-2); font-size: 13px; }
+    .summary b { color: var(--ink); font-weight: 600; }
+    .tablewrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; font-size: 12px; font-weight: 500; color: var(--ink-2); letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    tr:last-child td { border-bottom: 0; }
+    .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    th.num { text-align: right; }
+    .sub { display: block; font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+    .sym-cell { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; }
+    .pill { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; font-family: var(--font-mono); }
+    .pill.a { background: var(--tank-a-bg); color: var(--tank-a); }
+    .pill.b { background: var(--tank-b-bg); color: var(--tank-b); }
+    .pill.ok { background: var(--ok-bg); color: var(--ok); }
+    .pill.warn { background: var(--warn-bg); color: var(--warn); }
+    .pill.bad { background: var(--bad-bg); color: var(--bad); }
+    .pill.none { background: var(--surface-2); color: var(--ink-2); }
+    .meter { position: relative; height: 8px; min-width: 90px; background: var(--surface-2); border-radius: 4px; }
+    .meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+    .meter i.ok { background: var(--ok); } .meter i.warn { background: var(--warn); } .meter i.bad { background: var(--bad); }
+    .meter u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); text-decoration: none; }
+    @media (max-width: 560px) { .col-meter { display: none; } }
+    .total td { font-weight: 600; border-top: 1px solid var(--ink-2); }
+
+    .steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
+    .steps li { padding-left: 4px; }
+    .steps li::marker { font-family: var(--font-mono); color: var(--ink-2); }
+
+    .alerts { display: flex; flex-direction: column; gap: 8px; }
+    .alert { border-radius: 8px; padding: 10px 12px; font-size: 14px; border: 1px solid transparent; }
+    .alert.bad { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+    .alert.warn { background: var(--warn-bg); color: var(--warn); }
+    .alert.note { background: var(--surface-2); color: var(--ink); }
+    .alert.good { background: var(--ok-bg); color: var(--ok); }
+    .alert b { font-weight: 600; }
+    .err { color: var(--bad); font-weight: 500; }
+    .disclaimer { color: var(--ink-2); font-size: 12px; text-align: center; padding-top: 8px; }
+    /* Вкладки и готовые рецепты */
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+    .tabs button { background: transparent; color: var(--ink-2); border: 0; border-bottom: 3px solid transparent; border-radius: 0; font-weight: 600; padding: 10px 16px; white-space: nowrap; }
+    .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; }
+    .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+    .rparams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 460px; }
+    .mini { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); line-height: 1.7; white-space: nowrap; }
+    .rtable td.num, .rtable th.num { min-width: 96px; }
+    .rtable .btn-ghost { font-size: 13px; padding: 6px 10px; min-height: 36px; white-space: normal; }
+    .tips { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .tip { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+    .tip span { display: block; font-size: 12px; color: var(--ink-2); }
+    .tip b { font-family: var(--font-mono); font-size: 1.1rem; font-weight: 600; }
+    .span2 { grid-column: 1 / -1; }
+    .seg { display: inline-flex; align-self: flex-start; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .seg button { background: var(--bg); color: var(--ink-2); border: 0; border-radius: 0; font-family: var(--font-mono); font-weight: 600; min-width: 84px; }
+    .seg button + button { border-left: 1px solid var(--line); }
+    .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+    .chips .chip { padding: 4px 14px; min-height: 36px; }
+    details.water { border-top: 1px solid var(--line); padding-top: 12px; }
+    details.water summary { cursor: pointer; font-weight: 600; }
+    details.water[open] summary { margin-bottom: 8px; }
+    details.water .hint { margin-bottom: 10px; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .metric { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
+    .metric > span { font-size: 12px; color: var(--ink-2); }
+    .metric > b { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .metric > small { font-size: 12px; color: var(--ink-2); }
+    /* Шапка со значком */
+    .brand { display: flex; gap: 14px; align-items: center; }
+    .brand-text { min-width: 0; }
+    .logo { flex: 0 0 auto; width: 60px; height: 60px; border-radius: 15px; overflow: hidden; display: block; }
+    .logo svg { display: block; width: 100%; height: 100%; }
+    .kit { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .kit .hint { flex: 1 1 220px; min-width: 0; }
+    .kit button { min-height: 36px; padding: 4px 12px; font-size: 13px; }
+
+    /* Планшет и телефон: кнопка расчёта закреплена внизу экрана */
+    @media (max-width: 999px) {
+      #calcBtn { position: sticky; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); z-index: 5; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3); }
+    }
+    @media (max-width: 600px) {
+      body { padding-block: 14px 20px; font-size: 15px; }
+      .wrap { gap: 14px; }
+      .logo { width: 46px; height: 46px; border-radius: 12px; }
+      .lede { font-size: 14px; }
+      .panel { padding: 14px 12px; }
+      input[type="number"], input[type="text"], select { font-size: 16px; min-height: 44px; }
+      button { min-height: 44px; }
+      .kit button { min-height: 40px; }
+      .chips .chip { min-height: 40px; }
+      .seg button { min-height: 44px; }
+      th, td { padding-left: 6px; padding-right: 6px; }
+      .tile .val small { display: none; }
+      .tabs button { padding: 12px 14px; }
+      .rtable td:first-child, .rtable th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; min-width: 118px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+    </style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="brand">
+    <span class="logo" id="logo" role="img" aria-label="Значок приложения: колба с растением"></span>
+    <div class="brand-text">
+      <h1>Калькулятор удобрений из моносолей</h1>
+      <p class="lede">Выберите культуру и стадию. Набор солей подставится сам, сервис рассчитает навески в граммах, итоговые ppm, распределение по бакам А и Б и порядок смешивания.</p>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Разделы">
+    <button type="button" role="tab" id="tabbtn-calc" data-tab="calc" aria-selected="true" aria-controls="tab-calc">Калькулятор</button>
+    <button type="button" role="tab" id="tabbtn-recipes" data-tab="recipes" aria-selected="false" aria-controls="tab-recipes">Готовые рецепты</button>
+  </nav>
+
+  <div class="layout" id="tab-calc" role="tabpanel" aria-labelledby="tabbtn-calc">
+    <div class="col">
+      <section class="panel" aria-labelledby="h-params">
+        <h2 id="h-params">Параметры раствора</h2>
+        <div class="params">
+          <div class="fld span2">
+            <span id="modeLabel">Расчёт ведётся в</span>
+            <div class="seg" id="modeSeg" role="group" aria-labelledby="modeLabel">
+              <button type="button" data-mode="ppm" aria-pressed="true">PPM</button>
+              <button type="button" data-mode="ec" aria-pressed="false">EC</button>
+            </div>
+          </div>
+          <label class="fld span2" for="ppmScale" id="ppmScaleField"><span>Шкала пересчёта EC в ppm (TDS)</span>
+            <select id="ppmScale">
+              <option value="500">500 (NaCl, шкала Hanna)</option>
+              <option value="640">640 (Eutech, Milwaukee)</option>
+              <option value="700">700 (KCl, шкала Truncheon)</option>
+            </select></label>
+          <label class="fld span2" for="ecTarget" id="ecField" hidden><span>Целевой EC, мСм/см (профиль культуры масштабируется под него)</span>
+            <input id="ecTarget" type="number" inputmode="decimal" min="0.1" step="0.1" value="2"></label>
+          <label class="fld" for="crop"><span>Культура</span>
+            <select id="crop"></select></label>
+          <label class="fld" for="stage"><span>Стадия</span>
+            <select id="stage"></select></label>
+          <label class="fld" for="volume"><span>Объём воды, литров</span>
+            <input id="volume" type="number" inputmode="decimal" min="0.1" step="any" value="10"></label>
+          <label class="fld" for="dilution"><span>Концентрация маточного раствора</span>
+            <select id="dilution">
+              <option value="1">рабочий 1:0</option>
+              <option value="100">маточный 1:100</option>
+              <option value="200">маточный 1:200</option>
+            </select></label>
+          <label class="fld" for="feTarget"><span>Цель по Fe, ppm</span>
+            <input id="feTarget" type="number" inputmode="decimal" min="0" step="any" value="2"></label>
+          <div class="chips span2" id="presets" role="group" aria-label="Быстрый выбор объёма">
+            <button type="button" class="chip" data-vol="1">1 л</button>
+            <button type="button" class="chip" data-vol="5">5 л</button>
+            <button type="button" class="chip" data-vol="10">10 л</button>
+            <button type="button" class="chip" data-vol="20">20 л</button>
+            <button type="button" class="chip" data-vol="50">50 л</button>
+            <button type="button" class="chip" data-vol="100">100 л</button>
+          </div>
+        </div>
+        <details class="water">
+          <summary>Исходная вода (жёсткость и нитраты)</summary>
+          <p class="hint">Кальций и магний из крана или скважины уже есть в растворе. Введите ppm (мг/л) из анализа воды, и навески уменьшатся на эту величину.</p>
+          <div class="params">
+            <label class="fld" for="wCa"><span>Ca в воде, ppm</span>
+              <input id="wCa" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+            <label class="fld" for="wMg"><span>Mg в воде, ppm</span>
+              <input id="wMg" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+            <label class="fld" for="wN"><span>N (нитраты) в воде, ppm</span>
+              <input id="wN" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+          </div>
+        </details>
+        <div>
+          <div class="hint" style="margin-bottom:6px" id="tilesLabel">Целевые ppm</div>
+          <div class="tiles" id="tiles" aria-labelledby="tilesLabel"></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-dose">
+        <h2 id="h-dose">Полив из концентрата</h2>
+        <p class="hint">Задайте, какой раствор нужен для полива. Калькулятор покажет, сколько миллилитров готового концентрата добавить в воду. Работает при выборе маточного раствора 1:100 или 1:200.</p>
+        <div class="params">
+          <label class="fld" for="doseTarget"><span id="doseLabel">Нужный раствор для полива, ppm</span>
+            <input id="doseTarget" type="number" inputmode="decimal" min="0.01" step="any" value="950"></label>
+          <label class="fld" for="doseVol"><span>Объём воды для полива, литров</span>
+            <input id="doseVol" type="number" inputmode="decimal" min="0.1" step="any" value="10"></label>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-salts">
+        <h2 id="h-salts">Мои соли</h2>
+        <div class="kit">
+          <span class="hint" id="kitInfo"></span>
+          <button type="button" class="btn-ghost" id="kitBtn">Подобрать набор заново</button>
+        </div>
+        <div class="salts" id="saltList"></div>
+        <button type="button" class="btn-ghost" id="addSalt">+ Добавить соль</button>
+      </section>
+
+      <button type="button" class="btn-primary" id="calcBtn">Рассчитать</button>
+    </div>
+
+    <div class="col" id="results" aria-live="polite"></div>
+  </div>
+
+  <section class="col" id="tab-recipes" role="tabpanel" aria-labelledby="tabbtn-recipes" hidden>
+    <div class="panel">
+      <h2>Готовые рецепты</h2>
+      <p class="hint">Набор солей: кальциевая селитра, калиевая селитра, сульфат магния, монофосфат калия и хелат железа DTPA (2 ppm Fe). Навески считаются теми же формулами, что и в калькуляторе.</p>
+      <div class="chips" id="rCrops" role="group" aria-label="Культура"></div>
+      <div class="rparams">
+        <label class="fld" for="rVolume"><span>Объём воды, литров</span>
+          <input id="rVolume" type="number" inputmode="decimal" min="0.1" step="any" value="10"></label>
+        <label class="fld" for="rDilution"><span>Концентрация</span>
+          <select id="rDilution">
+            <option value="1">рабочий 1:0</option>
+            <option value="100">маточный 1:100</option>
+            <option value="200">маточный 1:200</option>
+          </select></label>
+      </div>
+    </div>
+    <div class="col" id="rBody"></div>
+  </section>
+
+  <p class="disclaimer">Расчёты носят рекомендательный характер; проверяйте EC и pH готового раствора</p>
+</div>
+
+<!-- Подпись автора -->
+<div style="text-align: center; padding: 24px 10px; font-size: 15px; color: var(--ink-2, #a4a5a3); background: var(--bg, #0e1613); border-top: 1px solid var(--line, #333); margin-top: 40px; width: 100%; box-sizing: border-box; position: relative; z-index: 9999;">
+    Разработано <a href="https://t.me/Andreascors" target="_blank" style="color: var(--accent, #1d6f3a); text-decoration: none; font-weight: bold;">@Andreascors</a> в Telegram
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Справочники ---------- */
+
+  // Коэффициенты пересчёта оксидов в элементы
+  const K_P = 0.436;   // P = P2O5 × 0.436
+  const K_K = 0.830;   // K = K2O × 0.830
+  const K_CA = 0.715;  // Ca = CaO × 0.715
+  const K_MG = 0.603;  // Mg = MgO × 0.603
+
+  // Целевые ppm: культура → стадия → элементы
+  const CROPS = {
+    pepper: { name: 'Перец', stages: {
+      veg:   { N: 180, P: 50, K: 180, Ca: 180, Mg: 60 },
+      bloom: { N: 160, P: 55, K: 220, Ca: 180, Mg: 60 },
+      fruit: { N: 150, P: 60, K: 260, Ca: 190, Mg: 65 } } },
+    tomato: { name: 'Томат', stages: {
+      veg:   { N: 170, P: 50, K: 200, Ca: 180, Mg: 55 },
+      bloom: { N: 150, P: 55, K: 230, Ca: 180, Mg: 60 },
+      fruit: { N: 140, P: 60, K: 280, Ca: 190, Mg: 65 } } },
+    cucumber: { name: 'Огурец', stages: {
+      veg:   { N: 190, P: 45, K: 200, Ca: 180, Mg: 55 },
+      bloom: { N: 170, P: 50, K: 240, Ca: 190, Mg: 60 },
+      fruit: { N: 160, P: 55, K: 270, Ca: 200, Mg: 65 } } },
+    eggplant: { name: 'Баклажан', stages: {
+      veg:   { N: 170, P: 50, K: 190, Ca: 170, Mg: 50 },
+      bloom: { N: 160, P: 55, K: 230, Ca: 175, Mg: 55 },
+      fruit: { N: 150, P: 60, K: 260, Ca: 180, Mg: 60 } } },
+    strawberry: { name: 'Клубника', stages: {
+      veg:   { N: 150, P: 45, K: 160, Ca: 150, Mg: 45 },
+      bloom: { N: 120, P: 50, K: 200, Ca: 150, Mg: 50 },
+      fruit: { N: 110, P: 50, K: 220, Ca: 150, Mg: 50 } } }
+  };
+  // Ориентиры по кислотности и EC для готовых рецептов
+  const CROP_TIPS = {
+    pepper:     { ph: '5,8–6,3', ec: '1,8–2,4', note: 'Избыток азота на цветении уходит в листву, а не в завязь. Следите, чтобы доля N не росла.' },
+    tomato:     { ph: '5,8–6,3', ec: '2,0–3,0', note: 'На плодоношении следите за кальцием: его нехватка вызывает вершинную гниль плодов.' },
+    cucumber:   { ph: '5,5–6,0', ec: '1,8–2,5', note: 'Огурец быстро реагирует на перекорм. Начинайте с нижней границы EC.' },
+    eggplant:   { ph: '5,8–6,3', ec: '1,8–2,5', note: 'Потребность в калии растёт к плодоношению. Ориентируйтесь на рост завязей.' },
+    strawberry: { ph: '5,5–6,2', ec: '1,0–1,8', note: 'Клубника чувствительна к засолению. Держите EC ниже, чем у томата и перца.' }
+  };
+  const STAGES = { veg: 'Вегетация', bloom: 'Цветение', fruit: 'Плодоношение' };
+  const ELEMENTS = [
+    { k: 'N', z: 7 }, { k: 'P', z: 15 }, { k: 'K', z: 19 }, { k: 'Ca', z: 20 }, { k: 'Mg', z: 12 }
+  ];
+
+  // Соли: проценты по упаковке (N, P2O5, K2O, CaO, MgO, S, Fe), sol — растворимость при 20 °C, г/л
+  const CATALOG = [
+    { id: 'cano3', name: 'Кальциевая селитра', acc: 'кальциевую селитру', n: 14.9, p2o5: 0, k2o: 0, cao: 27, mgo: 0, s: 0, fe: 0, chelate: true, sol: 1000 },
+    { id: 'kno3', name: 'Калиевая селитра', acc: 'калиевую селитру', n: 13.6, p2o5: 0, k2o: 46, cao: 0, mgo: 0, s: 0, fe: 0, chelate: true, sol: 316 },
+    { id: 'mgso4', name: 'Магний сернокислый (MgSO₄·7H₂O)', acc: 'сульфат магния', n: 0, p2o5: 0, k2o: 0, cao: 0, mgo: 16, s: 13, fe: 0, chelate: true, sol: 710 },
+    { id: 'mkp', name: 'Монофосфат калия (KH₂PO₄)', acc: 'монофосфат калия', n: 0, p2o5: 52, k2o: 34, cao: 0, mgo: 0, s: 0, fe: 0, chelate: true, sol: 222 },
+    { id: 'k2so4', name: 'Сульфат калия (K₂SO₄)', acc: 'сульфат калия', n: 0, p2o5: 0, k2o: 50, cao: 0, mgo: 0, s: 18, fe: 0, chelate: true, sol: 111 },
+    { id: 'nh4no3', name: 'Аммиачная селитра', acc: 'аммиачную селитру', n: 34.4, p2o5: 0, k2o: 0, cao: 0, mgo: 0, s: 0, fe: 0, chelate: true, sol: 1920 },
+    { id: 'fedtpa', name: 'Хелат железа DTPA', acc: 'хелат железа DTPA', n: 0, p2o5: 0, k2o: 0, cao: 0, mgo: 0, s: 0, fe: 6, chelate: true, sol: 0 }
+  ];
+
+  /* ---------- Ядро расчёта (без обращения к DOM) ---------- */
+  // <core>
+  // Содержание элементов в 1 г соли, мг: процент × 10 (1 % = 10 мг/г), оксиды пересчитываются в элементы
+  function perGram(s) {
+    return {
+      N: s.n * 10,
+      P: s.p2o5 * 10 * K_P,
+      K: s.k2o * 10 * K_K,
+      Ca: s.cao * 10 * K_CA,
+      Mg: s.mgo * 10 * K_MG,
+      S: s.s * 10,
+      Fe: s.fe * 10
+    };
+  }
+
+  // p: { V — литров воды (концентрата), F — коэффициент разбавления (1 для рабочего), ppm: {N,P,K,Ca,Mg}, fe — цель по Fe, ppm }
+  function solve(p, list) {
+    const Vw = p.V * p.F; // объём рабочего раствора, л
+    // Целевые мг = ppm × объём воды × коэффициент разбавления
+    // Исходная вода (ppm): то, что уже есть в воде, вычитается из целей
+    const w = p.water || {};
+    const wat = k => Math.max(w[k] || 0, 0);
+    const need = k => Math.max(p.ppm[k] - wat(k), 0) * Vw;
+    const T = { N: need('N'), P: need('P'), K: need('K'), Ca: need('Ca'), Mg: need('Mg'), S: 0, Fe: p.fe * Vw };
+    const items = list.map(s => ({ s: s, pg: perGram(s), g: 0, used: false }));
+    const sup = { N: 0, P: 0, K: 0, Ca: 0, Mg: 0, S: 0, Fe: 0 }; // уже внесено, мг
+
+    const add = (it, g) => { if (g > 0) { it.g += g; for (const k in sup) sup[k] += g * it.pg[k]; } };
+    // Навеска, закрывающая остаток по элементу: г = остаток мг / (мг элемента в 1 г соли)
+    const dose = (it, el) => {
+      if (!it) return;
+      const need = T[el] - sup[el];
+      if (need > 0 && it.pg[el] > 0) add(it, need / it.pg[el]);
+    };
+    const pick = f => { const it = items.find(x => !x.used && f(x)); if (it) it.used = true; return it; };
+
+    // a. Ca — кальциевая селитра (заодно даёт часть N)
+    dose(pick(it => it.pg.Ca > 0), 'Ca');
+    // b. Mg — сульфат магния
+    dose(pick(it => it.pg.Mg > 0 && it.pg.Ca === 0), 'Mg');
+    // c. P — монофосфат калия (заодно даёт часть K)
+    dose(pick(it => it.pg.P > 0 && it.pg.Ca === 0), 'P');
+    // d. K — калиевая селитра, пока N не перебран; остаток — сульфат калия
+    const kNit = pick(it => it.pg.K > 0 && it.pg.N > 0 && it.pg.P === 0 && it.pg.Ca === 0);
+    const kSul = pick(it => it.pg.K > 0 && it.pg.N === 0 && it.pg.P === 0 && it.pg.Ca === 0);
+    let needK = T.K - sup.K;
+    if (needK > 0) {
+      const remN = T.N - sup.N;
+      if (kNit && remN > 0) {
+        const gMaxByN = remN / kNit.pg.N;       // сколько селитры можно внести, не превысив N
+        const gByK = needK / kNit.pg.K;         // сколько нужно для закрытия K
+        add(kNit, Math.min(gMaxByN, gByK));
+        needK = T.K - sup.K;
+      }
+      if (needK > 1e-6) {
+        if (kSul) dose(kSul, 'K');
+        else if (kNit) dose(kNit, 'K');         // другой соли калия нет — закрываем K селитрой, N будет с избытком
+      }
+    }
+    // e. Остаток N — аммиачная селитра (если есть в списке)
+    if (T.N - sup.N > 0) dose(pick(it => it.pg.N > 0 && it.pg.P === 0 && it.pg.K === 0 && it.pg.Ca === 0 && it.pg.Mg === 0), 'N');
+    // f. Fe — хелат железа
+    dose(pick(it => it.pg.Fe > 0), 'Fe');
+
+    // Округление навесок до 0.01 г и пересчёт фактических ppm по округлённым навескам
+    items.forEach(it => { it.g = Math.round(it.g * 100) / 100; });
+    const act = { N: 0, P: 0, K: 0, Ca: 0, Mg: 0, S: 0, Fe: 0 };
+    items.forEach(it => { for (const k in act) act[k] += it.g * it.pg[k]; });
+    // Расчётные ppm = внесено солями / объём + то, что уже было в воде
+    const actPpm = {};
+    for (const k in act) actPpm[k] = act[k] / Vw + wat(k);
+    const tgtPpm = { N: p.ppm.N, P: p.ppm.P, K: p.ppm.K, Ca: p.ppm.Ca, Mg: p.ppm.Mg, S: 0, Fe: p.fe };
+    // Оценка EC (мСм/см): сумма катионов в мг-экв/л / 10. Аммонийный азот считается только для чистых N-солей.
+    const nh4 = items.reduce((a, it) => a + ((it.pg.N > 0 && it.pg.P === 0 && it.pg.K === 0 && it.pg.Ca === 0 && it.pg.Mg === 0) ? 0.5 * it.g * it.pg.N : 0), 0) / Vw;
+    const ec = (actPpm.Ca / 20.04 + actPpm.Mg / 12.15 + actPpm.K / 39.1 + nh4 / 14.007) / 10;
+    return { items: items, Vw: Vw, actPpm: actPpm, tgtPpm: tgtPpm, ec: ec };
+  }
+  // </core>
+
+  /* ---------- Состояние и DOM ---------- */
+  const $ = id => document.getElementById(id);
+  let uid = 0;
+  let salts = [];
+  let hasResult = false;
+  let lastText = '';
+  let rCrop = 'pepper';
+  let mode = 'ppm';        // 'ppm' или 'ec': в чём задаётся цель расчёта
+  let ecTouched = false;   // пользователь сам менял целевой EC
+  let doseEc = 1.9;         // нужный раствор для полива, мСм/см (950 ppm по шкале 500); единственный источник правды
+  let saltsTouched = false; // пользователь сам менял список солей: автоподбор набора отключён
+
+  const fmt = (x, d) => x.toLocaleString('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const num = x => x.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function makeSalt(catId) {
+    const c = CATALOG.find(x => x.id === catId);
+    if (!c) return { uid: ++uid, catId: 'custom', name: 'Своя соль', acc: 'свою соль', n: 0, p2o5: 0, k2o: 0, cao: 0, mgo: 0, s: 0, fe: 0, chelate: false, sol: 0, price: 0 };
+    return { uid: ++uid, catId: c.id, name: c.name, acc: c.acc, n: c.n, p2o5: c.p2o5, k2o: c.k2o, cao: c.cao, mgo: c.mgo, s: c.s, fe: c.fe, chelate: c.chelate, sol: c.sol, price: 0 };
+  }
+
+  function fillSelect(el, pairs) {
+    el.innerHTML = pairs.map(p => '<option value="' + p[0] + '">' + esc(p[1]) + '</option>').join('');
+  }
+
+  /* ---------- Карточки солей ---------- */
+  const FIELDS = [['n', 'N'], ['p2o5', 'P₂O₅'], ['k2o', 'K₂O'], ['cao', 'CaO'], ['mgo', 'MgO'], ['s', 'S']];
+
+  function cardHTML(s) {
+    const opts = CATALOG.map(c => '<option value="' + c.id + '"' + (c.id === s.catId ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('')
+      + '<option value="custom"' + (s.catId === 'custom' ? ' selected' : '') + '>Своя соль</option>';
+    const inputs = FIELDS.map(f =>
+      '<label class="fld" for="s' + s.uid + '-' + f[0] + '"><span>' + f[1] + ', %</span>' +
+      '<input id="s' + s.uid + '-' + f[0] + '" type="number" inputmode="decimal" min="0" step="any" data-f="' + f[0] + '" value="' + (s[f[0]] || '') + '" placeholder="0"></label>'
+    ).join('');
+    const nameField = s.catId === 'custom'
+      ? '<label class="fld" for="s' + s.uid + '-name"><span>Название своей соли</span><input id="s' + s.uid + '-name" type="text" data-f="name" value="' + esc(s.name) + '"></label>'
+      : '';
+    return '<div class="salt" data-uid="' + s.uid + '">' +
+      '<div class="salt-top"><label class="fld" for="s' + s.uid + '-cat"><span>Соль</span><select id="s' + s.uid + '-cat" data-act="cat">' + opts + '</select></label>' +
+      '<button type="button" class="btn-del" data-act="del" aria-label="Удалить: ' + esc(s.name) + '">Удалить</button></div>' +
+      nameField +
+      '<div class="fields">' + inputs + '</div>' +
+      '<div class="fe-row"><label class="fld" for="s' + s.uid + '-fe"><span>Fe, %</span>' +
+      '<input id="s' + s.uid + '-fe" type="number" inputmode="decimal" min="0" step="any" data-f="fe" value="' + (s.fe || '') + '" placeholder="0"></label>' +
+      '<label class="fld" for="s' + s.uid + '-price"><span>Цена, ₽/кг</span>' +
+      '<input id="s' + s.uid + '-price" type="number" inputmode="decimal" min="0" step="any" data-f="price" value="' + (s.price || '') + '" placeholder="0"></label>' +
+      '<label class="check" for="s' + s.uid + '-chel"><input id="s' + s.uid + '-chel" type="checkbox" data-f="chelate"' + (s.chelate ? ' checked' : '') + '>Железо в хелатной форме</label></div>' +
+      '</div>';
+  }
+
+  function renderSalts() {
+    const box = $('saltList');
+    box.innerHTML = salts.length ? salts.map(cardHTML).join('') : '<p class="hint">Список пуст. Добавьте хотя бы одну соль.</p>';
+  }
+
+  function onSaltEvent(e) {
+    const card = e.target.closest('.salt');
+    if (!card) return;
+    const s = salts.find(x => x.uid === Number(card.dataset.uid));
+    if (!s) return;
+    const t = e.target;
+    if (e.type === 'click' && t.dataset.act === 'del') {
+      salts = salts.filter(x => x !== s);
+      saltsTouched = true; updateKitInfo();
+      renderSalts(); refresh(); return;
+    }
+    if (e.type === 'change' && t.dataset.act === 'cat') {
+      const fresh = makeSalt(t.value);
+      fresh.uid = s.uid; uid--;
+      fresh.price = s.price;
+      salts[salts.indexOf(s)] = fresh;
+      saltsTouched = true; updateKitInfo();
+      renderSalts(); refresh(); return;
+    }
+    if (e.type === 'input' || e.type === 'change') {
+      const f = t.dataset.f;
+      if (!f) return;
+      if (f !== 'price' && !saltsTouched) { saltsTouched = true; updateKitInfo(); } // цена не меняет состав набора
+      if (f === 'name') s.name = t.value.trim() || 'Своя соль', s.acc = s.name;
+      else if (f === 'chelate') s.chelate = t.checked;
+      else s[f] = Math.max(parseFloat(t.value) || 0, 0);
+      refresh();
+    }
+  }
+
+  /* ---------- Набор солей под стадию и раствор ---------- */
+  function updateKitInfo() {
+    const F = parseInt($('dilution').value, 10) || 1;
+    $('kitInfo').textContent = saltsTouched
+      ? 'Список изменён вручную. Проценты можно править, как на упаковке.'
+      : 'Набор подобран под стадию «' + STAGES[$('stage').value].toLowerCase() + '», ' + (F > 1 ? 'маточный раствор 1:' + F : 'рабочий раствор') + '. Проценты можно править, как на упаковке.';
+  }
+  // Подставляет набор солей для текущей стадии; цены уже введённых солей сохраняются
+  function applyKit() {
+    const prices = {};
+    salts.forEach(s => { if (s.price > 0) prices[s.catId] = s.price; });
+    salts = KITS[$('stage').value].map(id => { const s = makeSalt(id); s.price = prices[id] || 0; return s; });
+    saltsTouched = false;
+    renderSalts();
+    updateKitInfo();
+  }
+
+  /* ---------- Значок приложения ---------- */
+  // Колба с двухцветной жидкостью (янтарный — бак А, синий — бак Б) и побегом
+  const ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><clipPath id="flaskClip"><path d="M26 18h12v12l11 22a3.6 3.6 0 0 1-3.2 5.2H18.2A3.6 3.6 0 0 1 15 52l11-22z"/></clipPath></defs>' +
+    '<rect width="64" height="64" rx="14" fill="#17696b"/>' +
+    '<g clip-path="url(#flaskClip)"><rect x="0" y="42" width="32" height="24" fill="#f0b25e"/><rect x="32" y="42" width="32" height="24" fill="#8db8f2"/></g>' +
+    '<path d="M26 18h12v12l11 22a3.6 3.6 0 0 1-3.2 5.2H18.2A3.6 3.6 0 0 1 15 52l11-22z" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>' +
+    '<path d="M32 18C32 11 36 7 44 7c0 7-4 11-12 11z" fill="#6fd08c"/><path d="M32 18C32 13 29 10 23 10c0 5 3 8 9 8z" fill="#b6e8c4"/></svg>';
+  function installIcon() {
+    $('logo').innerHTML = ICON_SVG;
+    try {
+      const l = document.createElement('link');
+      l.rel = 'icon'; l.type = 'image/svg+xml';
+      l.href = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(ICON_SVG);
+      document.head.appendChild(l);
+    } catch (e) { /* значок вкладки задаётся самим просмотрщиком */ }
+  }
+
+  /* ---------- Цели ---------- */
+  function currentTargets() { return CROPS[$('crop').value].stages[$('stage').value]; }
+
+  // Переключатель PPM / EC
+  // Коэффициент пересчёта EC (мСм/см) в ppm: 500, 640 или 700
+  function ppmScale() { return parseInt($('ppmScale').value, 10) || 500; }
+  // Значение EC в единицах выбранного режима
+  function showEc(ec) { return mode === 'ec' ? fmt(ec, 2) + ' мСм/см' : fmt(ec * ppmScale(), 0) + ' ppm'; }
+  function showRange(rg) { return mode === 'ec' ? fmt(rg[0], 1) + '–' + fmt(rg[1], 1) + ' мСм/см' : fmt(rg[0] * ppmScale(), 0) + '–' + fmt(rg[1] * ppmScale(), 0) + ' ppm'; }
+
+  // Поле «нужный раствор для полива» показывает doseEc в единицах текущего режима
+  function showDoseInput() {
+    $('doseLabel').textContent = mode === 'ec' ? 'Нужный раствор для полива, мСм/см' : 'Нужный раствор для полива, ppm';
+    const v = mode === 'ec' ? doseEc : doseEc * ppmScale();
+    $('doseTarget').value = mode === 'ec' ? String(Math.round(v * 100) / 100) : String(Math.round(v));
+  }
+  function readDoseInput() {
+    const v = parseFloat($('doseTarget').value);
+    if (v > 0) doseEc = mode === 'ec' ? v : v / ppmScale();
+  }
+
+  function setMode(m) {
+    mode = m === 'ec' ? 'ec' : 'ppm';
+    showDoseInput();
+    document.querySelectorAll('#modeSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    $('ecField').hidden = mode !== 'ec';
+    $('ppmScaleField').hidden = mode !== 'ppm';
+    syncEcDefault();
+    renderTiles();
+  }
+  // Целевой EC по умолчанию: середина нормы выбранной культуры (пока пользователь не ввёл своё значение)
+  function syncEcDefault() {
+    if (ecTouched) return;
+    const rg = CROP_TIPS[$('crop').value].ec.split('–').map(x => parseFloat(x.replace(',', '.')));
+    $('ecTarget').value = (Math.round((rg[0] + rg[1]) / 2 * 10) / 10).toFixed(1);
+  }
+
+  function renderTiles() {
+    $('tilesLabel').textContent = mode === 'ec' ? 'Профиль культуры, ppm (будет масштабирован под EC)' : 'Целевые ppm';
+    const t = currentTargets();
+    $('tiles').innerHTML = ELEMENTS.map(e =>
+      '<div class="tile"><span class="z">' + e.z + '</span><span class="sym">' + e.k + '</span><span class="val">' + t[e.k] + '<small> ppm</small></span></div>'
+    ).join('');
+  }
+
+  /* ---------- Рендер результатов ---------- */
+  const tankOf = it => (it.pg.Ca > 0 || it.pg.Fe > 0) ? 'A' : 'B';
+  const devClass = d => Math.abs(d) > 15 ? 'bad' : Math.abs(d) > 7 ? 'warn' : 'ok';
+
+  function calculate() {
+    hasResult = true;
+    const out = $('results');
+    const V = parseFloat($('volume').value);
+    const F = parseInt($('dilution').value, 10) || 1;
+    if (!(V > 0)) { out.innerHTML = '<section class="panel"><p class="err">Укажите объём воды больше нуля.</p></section>'; return; }
+    if (!salts.length) { out.innerHTML = '<section class="panel"><p class="err">Добавьте хотя бы одну соль.</p></section>'; return; }
+
+    const crop = $('crop').value, stage = $('stage').value;
+    const fe = Math.max(parseFloat($('feTarget').value) || 0, 0);
+    const water = { Ca: parseFloat($('wCa').value) || 0, Mg: parseFloat($('wMg').value) || 0, N: parseFloat($('wN').value) || 0 };
+    const hasWater = water.Ca > 0 || water.Mg > 0 || water.N > 0;
+    // Режим PPM: цели берутся из профиля культуры как есть.
+    // Режим EC: профиль масштабируется множителем k так, чтобы расчётный EC раствора совпал с заданным.
+    const base = currentTargets();
+    const scaled = k => ({ N: base.N * k, P: base.P * k, K: base.K * k, Ca: base.Ca * k, Mg: base.Mg * k });
+    const solveWith = k => solve({ V: V, F: F, ppm: scaled(k), fe: fe, water: water }, salts);
+    let scale = 1, ecTargetVal = 0, r;
+    if (mode === 'ec') {
+      ecTargetVal = parseFloat($('ecTarget').value);
+      if (!(ecTargetVal > 0)) { out.innerHTML = '<section class="panel"><p class="err">Укажите целевой EC больше нуля.</p></section>'; return; }
+      const ecBase = (base.Ca / 20.04 + base.Mg / 12.15 + base.K / 39.1) / 10; // EC базового профиля, мСм/см
+      scale = Math.min(Math.max(ecTargetVal / ecBase, 0), 5);
+      r = solveWith(scale);
+      for (let i = 0; i < 8 && r.ec > 0 && Math.abs(r.ec - ecTargetVal) > 0.005; i++) { // доводим с учётом воды и NH₄
+        scale = Math.min(scale * ecTargetVal / r.ec, 5);
+        r = solveWith(scale);
+      }
+    } else {
+      r = solveWith(1);
+    }
+    const items = r.items;
+    const concentrate = F > 1;
+    const hasFe = items.some(it => it.pg.Fe > 0);
+    const sulfates = items.filter(it => it.pg.S > 0 && it.pg.Ca === 0);
+    const phosphates = items.filter(it => it.pg.P > 0 && it.pg.Ca === 0);
+    const caSalts = items.filter(it => it.pg.Ca > 0);
+    const mgSalts = items.filter(it => it.pg.Mg > 0 && it.pg.Ca === 0);
+
+    /* Предупреждения */
+    const alerts = [];
+    items.filter(it => it.pg.Ca > 0 && (it.pg.S > 0 || it.pg.P > 0)).forEach(it => alerts.push({ l: 'bad',
+      t: '<b>' + esc(it.s.name) + '</b>: кальций и ' + (it.pg.S > 0 ? 'сульфат' : 'фосфат') + ' в одной соли. Это нерастворимый осадок (гипс или фосфат кальция). Проверьте проценты в карточке.' }));
+    if (items.some(it => it.pg.Fe > 0 && !it.s.chelate) && phosphates.length) alerts.push({ l: 'bad',
+      t: 'Железо не в хелатной форме вместе с фосфатами выпадет в осадок. Используйте хелат железа (DTPA, EDDHA) или вносите железо отдельно.' });
+    if (concentrate && caSalts.length && (sulfates.length || phosphates.length || mgSalts.length)) alerts.push({ l: 'bad',
+      t: '<b>Не смешивайте концентраты А и Б между собой.</b> Кальций с сульфатами даёт осадок гипса, с фосфатами — осадок фосфата кальция, с солями магния в высокой концентрации — помутнение. Смешивать можно только после разбавления водой.' });
+    items.forEach(it => {
+      if (it.g > 0 && it.s.sol > 0) {
+        const tank = tankOf(it);
+        const others = items.some(x => x.g > 0 && tankOf(x) !== tank);
+        const vol = others ? V / 2 : V;
+        const gl = it.g / vol;
+        if (gl > it.s.sol * 0.8) alerts.push({ l: 'bad',
+          t: '<b>' + esc(it.s.name) + '</b>: ' + fmt(gl, 0) + ' г/л в баке ' + tank.replace('A', 'А').replace('B', 'Б') + ' при растворимости около ' + fmt(it.s.sol, 0) + ' г/л (20 °C). Соль может не раствориться. Увеличьте объём воды или выберите меньшую концентрацию.' });
+      }
+    });
+    if (!concentrate && caSalts.length && (sulfates.length || phosphates.length)) alerts.push({ l: 'note',
+      t: 'Кальциевые соли разнесены с сульфатами и фосфатами по разным бакам (иначе выпадет гипс или фосфат кальция). Растворы соединяются только при разбавлении.' });
+
+    /* Отклонения */
+    const rows = ELEMENTS.map(e => ({ k: e.k, tgt: r.tgtPpm[e.k], act: r.actPpm[e.k] }));
+    rows.forEach(x => {
+      x.dev = x.tgt > 0 ? (x.act - x.tgt) / x.tgt * 100 : null;
+      if (x.dev !== null && Math.abs(x.dev) > 15) {
+        const provider = items.some(it => it.pg[x.k] > 0);
+        let why;
+        if (!provider) why = 'в списке нет соли с этим элементом';
+        else if (x.dev < 0 && x.k === 'N') why = 'добавьте аммиачную селитру, чтобы добить азот';
+        else if (x.dev > 0 && x.k === 'N') why = 'азот поступает с кальциевой и калиевой селитрой; для калия подойдёт сульфат калия';
+        else if (x.dev > 0) why = 'элемент поступает вместе с другими солями; отрегулируйте состав списка';
+        else why = 'проверьте проценты и состав списка солей';
+        alerts.push({ l: 'warn', t: '<b>' + x.k + '</b>: ' + fmt(x.act, 1) + ' ppm при цели ' + fmt(x.tgt, 1) + ' (' + (x.dev > 0 ? '+' : '') + fmt(x.dev, 0) + ' %). ' + why + '.' });
+      }
+    });
+    if (hasFe && fe > 0) { /* Fe показывается отдельной строкой */ }
+    const bads = alerts.filter(a => a.l === 'bad').length;
+    if (!bads) alerts.unshift({ l: 'good', t: 'Несовместимостей в одном баке не найдено.' });
+
+    /* Таблица навесок */
+    const usedItems = items.filter(it => it.used);
+    const hasPrice = items.some(it => it.s.price > 0);
+    const rowsSalts = items.map(it => {
+      const tank = tankOf(it);
+      const gives = ['N', 'P', 'K', 'Ca', 'Mg', 'Fe'].filter(k => it.g > 0 && it.g * it.pg[k] / r.Vw >= 0.5)
+        .map(k => k + ' ' + fmt(it.g * it.pg[k] / r.Vw, 0)).join(' · ');
+      const idle = !it.used || it.g === 0;
+      return '<tr><td>' + esc(it.s.name) + '<span class="sub">' + (idle ? 'не требуется для достижения цели' : 'вносит, ppm: ' + gives) + '</span></td>' +
+        '<td><span class="pill ' + (tank === 'A' ? 'a' : 'b') + '">Бак ' + (tank === 'A' ? 'А' : 'Б') + '</span></td>' +
+        '<td class="num">' + fmt(it.g, 2) + '</td>' +
+        (hasPrice ? '<td class="num">' + fmt(it.g / 1000 * (it.s.price || 0), 2) + '</td>' : '') + '</tr>';
+    }).join('');
+    const totalG = items.reduce((a, it) => a + it.g, 0);
+    const totalCost = items.reduce((a, it) => a + it.g / 1000 * (it.s.price || 0), 0);
+
+    /* Итоговые показатели: EC, солей на литр, стоимость */
+    const rng = CROP_TIPS[crop].ec.split('–').map(x => parseFloat(x.replace(',', '.')));
+    let ecC = 'ok', ecT = 'в пределах нормы';
+    if (r.ec < rng[0]) { ecC = rng[0] - r.ec > 0.3 ? 'bad' : 'warn'; ecT = 'ниже диапазона'; }
+    else if (r.ec > rng[1]) { ecC = r.ec - rng[1] > 0.3 ? 'bad' : 'warn'; ecT = 'выше диапазона'; }
+    const metrics = '<div class="metrics">' +
+      // В режиме EC показываем мСм/см, в режиме PPM тот же раствор в ppm: TDS = EC × шкала (500 / 640 / 700)
+      '<div class="metric"><span>' + (mode === 'ec' ? 'EC раствора, оценка' : 'Общая концентрация (TDS), оценка') + '</span><b>' + showEc(r.ec) + '</b><span class="pill ' + ecC + '">' + ecT + '</span><small>норма для культуры ' + showRange(rng) +
+      (mode === 'ec' ? ', цель ' + fmt(ecTargetVal, 2) + ' мСм/см' : '. Это ' + fmt(r.ec, 2) + ' мСм/см × ' + ppmScale()) + '</small></div>' +
+      '<div class="metric"><span>Солей в 1 л раствора</span><b>' + fmt(totalG / r.Vw, 2) + ' г</b><small>рабочий раствор</small></div>' +
+      (hasPrice ? '<div class="metric"><span>Стоимость партии</span><b>' + fmt(totalCost, 2) + ' ₽</b><small>' + fmt(totalCost / r.Vw, 2) + ' ₽ на 1 л раствора</small></div>' : '') +
+      '</div>';
+
+    /* Таблица ppm */
+    const ppmRows = rows.map(x => {
+      const c = x.dev === null ? 'none' : devClass(x.dev);
+      const label = x.dev === null ? '—' : (x.dev > 0 ? '▲ +' : x.dev < 0 ? '▼ ' : '') + fmt(x.dev, 1) + ' %';
+      const fill = x.tgt > 0 ? Math.min(x.act / x.tgt, 1.3) / 1.3 * 100 : 0;
+      return '<tr><td class="sym-cell">' + x.k + '</td><td class="num">' + fmt(x.tgt, 1) + '</td><td class="num">' + fmt(x.act, 1) + '</td>' +
+        '<td><span class="pill ' + c + '">' + label + '</span></td>' +
+        '<td class="col-meter"><div class="meter"><i class="' + c + '" style="width:' + fill.toFixed(1) + '%"></i><u style="left:' + (100 / 1.3).toFixed(1) + '%"></u></div></td></tr>';
+    });
+    if (hasFe || fe > 0) {
+      const dev = r.tgtPpm.Fe > 0 ? (r.actPpm.Fe - r.tgtPpm.Fe) / r.tgtPpm.Fe * 100 : null;
+      const c = dev === null ? 'none' : devClass(dev);
+      const fill = r.tgtPpm.Fe > 0 ? Math.min(r.actPpm.Fe / r.tgtPpm.Fe, 1.3) / 1.3 * 100 : 0;
+      ppmRows.push('<tr><td class="sym-cell">Fe</td><td class="num">' + fmt(r.tgtPpm.Fe, 1) + '</td><td class="num">' + fmt(r.actPpm.Fe, 1) + '</td>' +
+        '<td><span class="pill ' + c + '">' + (dev === null ? '—' : (dev > 0 ? '▲ +' : dev < 0 ? '▼ ' : '') + fmt(dev, 1) + ' %') + '</span></td>' +
+        '<td class="col-meter"><div class="meter"><i class="' + c + '" style="width:' + fill.toFixed(1) + '%"></i><u style="left:' + (100 / 1.3).toFixed(1) + '%"></u></div></td></tr>');
+    }
+    if (r.actPpm.S > 0) ppmRows.push('<tr><td class="sym-cell">S</td><td class="num">—</td><td class="num">' + fmt(r.actPpm.S, 1) + '</td><td><span class="pill none">справочно</span></td><td class="col-meter"></td></tr>');
+
+    /* Порядок смешивания */
+    const inA = items.filter(it => it.g > 0 && tankOf(it) === 'A');
+    const inB = items.filter(it => it.g > 0 && tankOf(it) === 'B');
+    const both = inA.length > 0 && inB.length > 0;
+    const tankV = both ? V / 2 : V;
+    const list = arr => arr.map(it => esc(it.s.acc) + ' <b>' + fmt(it.g, 2) + ' г</b>').join(', ');
+    const steps = [];
+    if (inA.length) steps.push('В <span class="pill a">бак А</span> (' + num(tankV) + ' л воды, около ' + (both ? 'половины' : 'всего') + ' объёма) растворите: ' + list(inA) + '. Перемешайте до полного растворения.');
+    if (inB.length) steps.push('В отдельной ёмкости (<span class="pill b">бак Б</span>, ' + num(tankV) + ' л воды) растворите: ' + list(inB) + '. Перемешайте до полного растворения.');
+    if (!concentrate) {
+      if (both) steps.push('Влейте раствор Б в бак А тонкой струёй при постоянном перемешивании.');
+      steps.push('Доведите объём до <b>' + num(V) + ' л</b> и проверьте EC/ppm и pH.');
+    } else {
+      if (both) steps.push('Доведите каждый бак до <b>' + num(tankV) + ' л</b>. <b>Концентраты А и Б не смешивайте</b>, храните раздельно.');
+      else steps.push('Доведите объём бака до <b>' + num(V) + ' л</b>.');
+      const ml = 1000 / F / (both ? 2 : 1);
+      steps.push('Для полива налейте в воду сначала ' + (both ? '<b>' + fmt(ml, 1) + ' мл</b> концентрата А на 1 л, перемешайте, затем <b>' + fmt(ml, 1) + ' мл</b> концентрата Б на 1 л' : '<b>' + fmt(ml, 1) + ' мл</b> концентрата на 1 л воды') + ' (разбавление 1:' + F + '). Из ' + num(V) + ' л концентрата получится ' + num(r.Vw) + ' л рабочего раствора.');
+      steps.push('Проверьте EC и pH рабочего раствора.');
+    }
+    if (!steps.length) steps.push('Ни одна соль не участвует в расчёте. Проверьте состав списка.');
+
+    /* Дозировка концентрата для полива.
+       Готовый концентрат, разбавленный 1:F, даёт ровно расчётный раствор (r.ec).
+       Для другой крепости раствор умножается на k = нужный EC / расчётный EC. */
+    let doseText = '';
+    let dosePanel = '';
+    const irrV = parseFloat($('doseVol').value);
+    if (!concentrate) {
+      dosePanel = '<section class="panel"><h2>Полив из концентрата</h2><p class="hint">Выберите маточный раствор 1:100 или 1:200, и здесь появится дозировка в миллилитрах.</p></section>';
+    } else if (!(irrV > 0) || !(doseEc > 0) || !(r.ec > 0)) {
+      dosePanel = '<section class="panel"><h2>Полив из концентрата</h2><p class="err">Укажите нужный раствор и объём воды для полива больше нуля.</p></section>';
+    } else {
+      const k = doseEc / r.ec;
+      const mlL = 1000 / F * k;                 // мл смешанного концентрата на 1 л воды для полива
+      const split = both ? 2 : 1;               // при двух баках половина из А и половина из Б
+      const perTank = mlL / split;
+      const tot = perTank * irrV;
+      const tgtTxt = mode === 'ec' ? fmt(doseEc, 2) + ' мСм/см' : fmt(doseEc * ppmScale(), 0) + ' ppm';
+      const tooStrong = mlL > 1000;
+      const lines = both
+        ? '<div class="metric"><span class="pill a">Концентрат А</span><b>' + fmt(perTank, 1) + ' мл/л</b><small>на ' + num(irrV) + ' л воды: <b>' + fmt(tot, 1) + ' мл</b></small></div>' +
+          '<div class="metric"><span class="pill b">Концентрат Б</span><b>' + fmt(perTank, 1) + ' мл/л</b><small>на ' + num(irrV) + ' л воды: <b>' + fmt(tot, 1) + ' мл</b></small></div>'
+        : '<div class="metric"><span>Концентрат</span><b>' + fmt(perTank, 1) + ' мл/л</b><small>на ' + num(irrV) + ' л воды: <b>' + fmt(tot, 1) + ' мл</b></small></div>';
+      dosePanel = '<section class="panel" aria-labelledby="h-dosr"><h2 id="h-dosr">Полив из концентрата: ' + tgtTxt + '</h2>' +
+        '<div class="metrics">' + lines + '</div>' +
+        '<ol class="steps"><li>Налейте в ёмкость ' + num(irrV) + ' л воды.</li>' +
+        (both ? '<li>Добавьте <b>' + fmt(tot, 1) + ' мл</b> концентрата А и перемешайте.</li><li>Затем добавьте <b>' + fmt(tot, 1) + ' мл</b> концентрата Б и перемешайте. Концентраты А и Б не смешивайте друг с другом в чистом виде.</li>'
+              : '<li>Добавьте <b>' + fmt(tot, 1) + ' мл</b> концентрата и перемешайте.</li>') +
+        '<li>Проверьте EC и pH. Цель: ' + tgtTxt + '.</li></ol>' +
+        (tooStrong ? '<div class="alert bad">Нужна доза больше 1000 мл на литр: такой раствор из этого концентрата не получить. Выберите более крепкий концентрат или меньшую цель.</div>' : '') +
+        '<p class="hint">Расчёт по оценке EC раствора и без учёта собственных солей воды для полива. Цель в ppm пересчитывается по шкале ' + ppmScale() + '. Рабочий раствор из этого концентрата при разбавлении 1:' + F + ' даёт ' + showEc(r.ec) + '.</p></section>';
+      doseText = '\n\nПолив ' + tgtTxt + ', ' + num(irrV) + ' л воды: ' + (both ? 'концентрат А ' + fmt(tot, 1) + ' мл, концентрат Б ' + fmt(tot, 1) + ' мл' : 'концентрат ' + fmt(tot, 1) + ' мл') + ' (' + fmt(perTank, 1) + ' мл/л' + (both ? ' каждого' : '') + ')';
+    }
+
+    // Текст рецепта для кнопки «Копировать»
+    const plain = h => h.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    lastText = CROPS[crop].name + ', ' + STAGES[stage].toLowerCase() + ', ' + num(V) + ' л' + (concentrate ? ' концентрата 1:' + F : '') + '\n\nНавески:\n' +
+      items.filter(it => it.g > 0).map(it => '- ' + it.s.name + ' (бак ' + (tankOf(it) === 'A' ? 'А' : 'Б') + '): ' + fmt(it.g, 2) + ' г').join('\n') +
+      '\n\nРежим: ' + (mode === 'ec' ? 'по EC, цель ' + fmt(ecTargetVal, 2) + ' мСм/см' : 'по ppm (шкала ' + ppmScale() + ')') + '\n' + (mode === 'ec' ? 'EC раствора (оценка): ' : 'TDS раствора (оценка): ') + showEc(r.ec) + (hasPrice ? '\nСтоимость партии: ' + fmt(totalCost, 2) + ' ₽' : '') +
+      '\n\nПорядок:\n' + steps.map((s, i) => (i + 1) + '. ' + plain(s)).join('\n');
+    lastText += doseText;
+    save();
+
+    out.innerHTML =
+      '<section class="panel"><div class="summary"><span><b>' + esc(CROPS[crop].name) + '</b>, ' + STAGES[stage].toLowerCase() + '</span>' +
+      '<span>Вода: <b>' + num(V) + ' л</b></span>' +
+      '<span>' + (concentrate ? 'Маточный 1:' + F + ', рабочего раствора <b>' + num(r.Vw) + ' л</b>' : 'Рабочий раствор') + '</span>' + (hasWater ? '<span>Вода: Ca ' + num(water.Ca) + ', Mg ' + num(water.Mg) + ', N ' + num(water.N) + ' ppm</span>' : '') + '</div>' + metrics +
+      '<div><button type="button" class="btn-ghost" id="copyBtn">Копировать рецепт</button></div></section>' +
+      dosePanel +
+      '<section class="panel" aria-labelledby="h-alerts"><h2 id="h-alerts">Предупреждения</h2><div class="alerts">' +
+      alerts.map(a => '<div class="alert ' + a.l + '">' + a.t + '</div>').join('') + '</div></section>' +
+      '<section class="panel" aria-labelledby="h-g"><h2 id="h-g">Навески на ' + num(V) + ' л' + (concentrate ? ' концентрата' : '') + '</h2>' +
+      '<div class="tablewrap"><table><thead><tr><th>Соль</th><th>Бак</th><th class="num">Навеска, г</th>' + (hasPrice ? '<th class="num">Стоимость, ₽</th>' : '') + '</tr></thead><tbody>' + rowsSalts +
+      '<tr class="total"><td>Всего</td><td></td><td class="num">' + fmt(totalG, 2) + '</td>' + (hasPrice ? '<td class="num">' + fmt(totalCost, 2) + '</td>' : '') + '</tr></tbody></table></div></section>' +
+      '<section class="panel" aria-labelledby="h-ppm"><h2 id="h-ppm">Целевые и расчётные ppm</h2>' +
+      '<div class="tablewrap"><table><thead><tr><th>Элемент</th><th class="num">Цель</th><th class="num">Расчёт</th><th>Отклонение</th><th class="col-meter">Цель = черта</th></tr></thead><tbody>' + ppmRows.join('') + '</tbody></table></div>' +
+      '<p class="hint">Зелёный: до ±7 %, жёлтый: до ±15 %, красный: больше ±15 %. ppm посчитаны по округлённым навескам на ' + num(r.Vw) + ' л рабочего раствора.' +
+      (mode === 'ec' ? ' Профиль культуры умножен на ' + fmt(scale, 2) + ', чтобы получить EC ' + fmt(ecTargetVal, 2) + ' мСм/см.' : '') + '</p></section>' +
+      '<section class="panel" aria-labelledby="h-mix"><h2 id="h-mix">Порядок смешивания</h2><ol class="steps">' +
+      steps.map(s => '<li>' + s + '</li>').join('') + '</ol></section>';
+  }
+
+  /* ---------- Готовые рецепты ---------- */
+  // Наборы солей по стадии: на вегетации нужен азот, остаток добивает аммиачная селитра;
+  // на цветении и плодоношении калия много, поэтому его добираем сульфатом калия, чтобы не перебрать азот.
+  const KITS = {
+    veg:   ['cano3', 'kno3', 'mgso4', 'mkp', 'nh4no3', 'fedtpa'],
+    bloom: ['cano3', 'kno3', 'mgso4', 'mkp', 'k2so4', 'fedtpa'],
+    fruit: ['cano3', 'kno3', 'mgso4', 'mkp', 'k2so4', 'fedtpa']
+  };
+  const STAGE_KEYS = ['veg', 'bloom', 'fruit'];
+
+  function renderRecipes() {
+    $('rCrops').innerHTML = Object.keys(CROPS).map(k =>
+      '<button type="button" class="chip" data-crop="' + k + '" aria-pressed="' + (k === rCrop) + '">' + esc(CROPS[k].name) + '</button>').join('');
+    const body = $('rBody');
+    const V = parseFloat($('rVolume').value);
+    const F = parseInt($('rDilution').value, 10) || 1;
+    if (!(V > 0)) { body.innerHTML = '<section class="panel"><p class="err">Укажите объём воды больше нуля.</p></section>'; return; }
+    // Каждая стадия считается со своим набором солей (тем же, что подставляет калькулятор)
+    const ALL = ['cano3', 'kno3', 'mgso4', 'mkp', 'k2so4', 'nh4no3', 'fedtpa'];
+    const res = STAGE_KEYS.map(st => {
+      const set = KITS[st].map(id => Object.assign({}, CATALOG.find(c => c.id === id)));
+      return { ids: KITS[st], r: solve({ V: V, F: F, ppm: CROPS[rCrop].stages[st], fe: 2 }, set) };
+    });
+    const gOf = (x, id) => { const i = x.ids.indexOf(id); return i < 0 ? null : x.r.items[i].g; };
+    const rows = ALL.map(id => {
+      const c = CATALOG.find(x => x.id === id);
+      const tank = (c.cao > 0 || c.fe > 0) ? 'A' : 'B';
+      return '<tr><td>' + esc(c.name) + '</td><td><span class="pill ' + (tank === 'A' ? 'a' : 'b') + '">Бак ' + (tank === 'A' ? 'А' : 'Б') + '</span></td>' +
+        res.map(x => { const g = gOf(x, id); return '<td class="num">' + (g === null ? '—' : fmt(g, 2)) + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    const totals = res.map(x => '<td class="num">' + fmt(x.r.items.reduce((a, it) => a + it.g, 0), 2) + '</td>').join('');
+    const ppmCells = STAGE_KEYS.map(st => {
+      const t = CROPS[rCrop].stages[st];
+      return '<td class="mini">' + ELEMENTS.map(e => e.k + ' ' + t[e.k]).join('<br>') + '</td>';
+    }).join('');
+    const btns = STAGE_KEYS.map(st => '<td><button type="button" class="btn-ghost" data-open="' + st + '">Открыть в калькуляторе</button></td>').join('');
+    const tip = CROP_TIPS[rCrop];
+    body.innerHTML =
+      '<section class="panel"><h2>' + esc(CROPS[rCrop].name) + ': навески на ' + num(V) + ' л' + (F > 1 ? ' концентрата 1:' + F : '') + '</h2>' +
+      '<div class="tablewrap"><table class="rtable"><thead><tr><th>Соль</th><th>Бак</th>' +
+      STAGE_KEYS.map(st => '<th class="num">' + STAGES[st] + ', г</th>').join('') + '</tr></thead><tbody>' + rows +
+      '<tr class="total"><td>Всего</td><td></td>' + totals + '</tr>' +
+      '<tr><td>Целевые ppm</td><td></td>' + ppmCells + '</tr>' +
+      '<tr><td></td><td></td>' + btns + '</tr></tbody></table></div>' +
+      '<p class="hint">Набор солей зависит от стадии: на вегетации добавлена аммиачная селитра, на цветении и плодоношении сульфат калия. Прочерк значит, что соль в рецепте не используется. Бак А: кальциевая селитра и хелат железа. Бак Б: остальные соли. ' +
+      (F > 1 ? 'Концентраты А и Б между собой не смешивайте, соединяйте только в воде для полива.' : 'Раствор Б вливайте в раствор А тонкой струёй при перемешивании.') + '</p></section>' +
+      '<section class="panel"><h2>Ориентиры по pH и EC</h2>' +
+      '<div class="tips"><div class="tip"><span>pH раствора</span><b>' + tip.ph + '</b></div><div class="tip"><span>' + (mode === 'ec' ? 'EC раствора' : 'TDS раствора') + '</span><b>' + showRange(tip.ec.split('–').map(x => parseFloat(x.replace(',', '.')))) + '</b></div></div>' +
+      '<p>' + esc(tip.note) + '</p></section>';
+  }
+
+  function openRecipe(stage) {
+    $('crop').value = rCrop;
+    $('stage').value = stage;
+    $('volume').value = $('rVolume').value;
+    $('dilution').value = $('rDilution').value;
+    setMode('ppm');          // рецепт задан в ppm
+    applyKit();              // и приходит со своим набором солей
+    renderTiles();
+    switchTab('calc');
+    calculate();
+    window.scrollTo(0, 0);
+  }
+
+  function switchTab(name) {
+    document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    $('tab-calc').hidden = name !== 'calc';
+    $('tab-recipes').hidden = name !== 'recipes';
+  }
+
+  /* ---------- Сохранение настроек в браузере ---------- */
+  const STORE = 'monosalts-v1';
+  function save() {
+    try {
+      localStorage.setItem(STORE, JSON.stringify({
+        crop: $('crop').value, stage: $('stage').value, volume: $('volume').value,
+        dilution: $('dilution').value, fe: $('feTarget').value, wCa: $('wCa').value, wMg: $('wMg').value, wN: $('wN').value,
+        mode: mode, scale: $('ppmScale').value, doseEc: doseEc, doseVol: $('doseVol').value, ec: $('ecTarget').value, ecTouched: ecTouched, saltsTouched: saltsTouched, salts: salts
+      }));
+    } catch (e) { /* хранилище недоступно: работаем без сохранения */ }
+  }
+  function load() {
+    try {
+      const d = JSON.parse(localStorage.getItem(STORE) || 'null');
+      if (!d) return;
+      if (CROPS[d.crop]) $('crop').value = d.crop;
+      if (STAGES[d.stage]) $('stage').value = d.stage;
+      if (parseFloat(d.volume) > 0) $('volume').value = d.volume;
+      if (['1', '100', '200'].indexOf(String(d.dilution)) >= 0) $('dilution').value = String(d.dilution);
+      if (parseFloat(d.fe) >= 0) $('feTarget').value = d.fe;
+      if (d.mode === 'ec') mode = 'ec';
+      if (parseFloat(d.doseEc) > 0) doseEc = parseFloat(d.doseEc);
+      if (parseFloat(d.doseVol) > 0) $('doseVol').value = d.doseVol;
+      if (['500', '640', '700'].indexOf(String(d.scale)) >= 0) $('ppmScale').value = String(d.scale);
+      saltsTouched = !!d.saltsTouched;
+      if (d.ecTouched && parseFloat(d.ec) > 0) { ecTouched = true; $('ecTarget').value = d.ec; }
+      [['wCa', d.wCa], ['wMg', d.wMg], ['wN', d.wN]].forEach(p => { if (parseFloat(p[1]) >= 0) $(p[0]).value = p[1]; });
+      if (parseFloat(d.wCa) > 0 || parseFloat(d.wMg) > 0 || parseFloat(d.wN) > 0) document.querySelector('details.water').open = true;
+      if (Array.isArray(d.salts) && d.salts.length) {
+        salts = d.salts.map(x => {
+          const b = makeSalt('custom');
+          const known = CATALOG.some(c => c.id === x.catId);
+          const n = v => Math.max(parseFloat(v) || 0, 0);
+          return Object.assign(b, { catId: known ? x.catId : 'custom', name: String(x.name || 'Своя соль'), acc: String(x.acc || x.name || 'свою соль'),
+            n: n(x.n), p2o5: n(x.p2o5), k2o: n(x.k2o), cao: n(x.cao), mgo: n(x.mgo), s: n(x.s), fe: n(x.fe), chelate: !!x.chelate, sol: n(x.sol), price: n(x.price) });
+        });
+      }
+    } catch (e) { /* повреждённые данные игнорируем */ }
+  }
+
+  function copyRecipe(btn) {
+    const done = ok => { btn.textContent = ok ? 'Скопировано' : 'Не удалось скопировать'; setTimeout(() => { btn.textContent = 'Копировать рецепт'; }, 1800); };
+    const fallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = lastText; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta); done(ok);
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(lastText).then(() => done(true), fallback);
+      else fallback();
+    } catch (e) { fallback(); }
+  }
+
+  function refresh() { if (hasResult) calculate(); }
+
+  /* ---------- Инициализация ---------- */
+  fillSelect($('crop'), Object.keys(CROPS).map(k => [k, CROPS[k].name]));
+  fillSelect($('stage'), Object.keys(STAGES).map(k => [k, STAGES[k]]));
+  $('crop').value = 'pepper';
+  $('stage').value = 'veg';
+  load();
+  setMode(mode);
+  installIcon();
+  if (!saltsTouched || !salts.length) applyKit(); else { renderSalts(); updateKitInfo(); }
+  renderRecipes();
+
+  document.querySelector('.tabs').addEventListener('click', function (e) {
+    const b = e.target.closest('button[data-tab]');
+    if (b) switchTab(b.dataset.tab);
+  });
+  $('rCrops').addEventListener('click', function (e) {
+    const b = e.target.closest('button[data-crop]');
+    if (b) { rCrop = b.dataset.crop; renderRecipes(); }
+  });
+  $('rBody').addEventListener('click', function (e) {
+    const b = e.target.closest('button[data-open]');
+    if (b) openRecipe(b.dataset.open);
+  });
+  ['rVolume', 'rDilution'].forEach(id => $(id).addEventListener('input', renderRecipes));
+  $('results').addEventListener('click', function (e) {
+    if (e.target.id === 'copyBtn') copyRecipe(e.target);
+  });
+
+  $('saltList').addEventListener('click', onSaltEvent);
+  $('saltList').addEventListener('change', onSaltEvent);
+  $('saltList').addEventListener('input', onSaltEvent);
+  $('addSalt').addEventListener('click', function () {
+    const free = CATALOG.find(c => !salts.some(s => s.catId === c.id));
+    salts.push(makeSalt(free ? free.id : 'custom'));
+    saltsTouched = true; updateKitInfo();
+    renderSalts(); refresh();
+  });
+  $('kitBtn').addEventListener('click', function () { applyKit(); refresh(); });
+  $('calcBtn').addEventListener('click', function () {
+    calculate();
+    // На телефоне результаты ниже формы: прокручиваем к ним
+    if (window.matchMedia && window.matchMedia('(max-width: 999px)').matches) {
+      try { $('results').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { $('results').scrollIntoView(); }
+    }
+  });
+  ['crop', 'stage'].forEach(id => $(id).addEventListener('change', function () {
+    syncEcDefault();
+    if (!saltsTouched) applyKit(); else updateKitInfo();
+    renderTiles(); refresh();
+  }));
+  $('modeSeg').addEventListener('click', function (e) {
+    const b = e.target.closest('button[data-mode]');
+    if (b) { setMode(b.dataset.mode); refresh(); renderRecipes(); }
+  });
+  $('ecTarget').addEventListener('input', function () { ecTouched = true; refresh(); });
+  // Смена шкалы: число в поле остаётся тем, что видит пользователь на приборе
+  $('ppmScale').addEventListener('change', function () { readDoseInput(); refresh(); renderRecipes(); });
+  $('doseTarget').addEventListener('input', function () { readDoseInput(); refresh(); });
+  $('doseVol').addEventListener('input', refresh);
+  ['volume', 'dilution', 'feTarget', 'wCa', 'wMg', 'wN'].forEach(id => $(id).addEventListener('input', function () { updateKitInfo(); refresh(); }));
+  $('presets').addEventListener('click', function (e) {
+    const b = e.target.closest('button[data-vol]');
+    if (b) { $('volume').value = b.dataset.vol; refresh(); }
+  });
+
+  calculate(); // пример расчёта сразу при открытии
+})();
+</script>
+
+</body>
+</html>
