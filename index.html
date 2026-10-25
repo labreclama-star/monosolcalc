@@ -333,13 +333,19 @@
       </section>
 
       <section class="panel" aria-labelledby="h-dose">
-        <h2 id="h-dose">Полив из концентрата</h2>
-        <p class="hint">Задайте, какой раствор нужен для полива. Калькулятор покажет, сколько миллилитров готового концентрата добавить в воду. Работает при выборе маточного раствора 1:100 или 1:200.</p>
+        <h2 id="h-dose">Полив</h2>
+        <div class="seg" id="doseSeg" role="group" aria-label="Как поливать">
+          <button type="button" data-dose="conc" aria-pressed="true">Из концентрата</button>
+          <button type="button" data-dose="direct" aria-pressed="false">Сразу для полива</button>
+        </div>
+        <p class="hint" id="doseHint"></p>
         <div class="params">
           <label class="fld" for="doseTarget"><span id="doseLabel">Нужный раствор для полива, ppm</span>
             <input id="doseTarget" type="number" inputmode="decimal" min="0.01" step="any" value="950"></label>
           <label class="fld" for="doseVol"><span>Объём воды для полива, литров</span>
             <input id="doseVol" type="number" inputmode="decimal" min="0.1" step="any" value="10"></label>
+          <label class="fld span2" for="tankShare"><span>Доля бака А от общего объёма, % (остальное бак Б). Меняйте, чтобы подобрать нужные мл из А и Б</span>
+            <input id="tankShare" type="number" inputmode="decimal" min="10" max="90" step="any" value="50"></label>
         </div>
       </section>
 
@@ -534,6 +540,7 @@
   let mode = 'ppm';        // 'ppm' или 'ec': в чём задаётся цель расчёта
   let ecTouched = false;   // пользователь сам менял целевой EC
   let doseEc = 1.9;         // нужный раствор для полива, мСм/см (950 ppm по шкале 500); единственный источник правды
+  let doseMode = 'conc';    // 'conc': добавляем мл концентрата в воду; 'direct': раствор для полива готовим сразу из солей
   let saltsTouched = false; // пользователь сам менял список солей: автоподбор набора отключён
 
   const fmt = (x, d) => x.toLocaleString('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -666,6 +673,14 @@
     if (v > 0) doseEc = mode === 'ec' ? v : v / ppmScale();
   }
 
+  function setDoseMode(m) {
+    doseMode = m === 'direct' ? 'direct' : 'conc';
+    document.querySelectorAll('#doseSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dose === doseMode)));
+    $('doseHint').textContent = doseMode === 'direct'
+      ? 'Укажите, какой раствор нужен и сколько воды для полива. Калькулятор подберёт навески солей и порядок смешивания, концентрат не нужен.'
+      : 'Укажите, какой раствор нужен для полива. Калькулятор покажет, сколько миллилитров концентратов А и Б добавить в воду. Нужен маточный раствор 1:100 или 1:200 (выбирается выше). Чтобы получить нужные мл из А и Б, меняйте долю бака А.';
+  }
+
   function setMode(m) {
     mode = m === 'ec' ? 'ec' : 'ppm';
     showDoseInput();
@@ -706,6 +721,8 @@
     const fe = Math.max(parseFloat($('feTarget').value) || 0, 0);
     const water = { Ca: parseFloat($('wCa').value) || 0, Mg: parseFloat($('wMg').value) || 0, N: parseFloat($('wN').value) || 0 };
     const hasWater = water.Ca > 0 || water.Mg > 0 || water.N > 0;
+    // Доля бака А от общего объёма (10–90 %): задаёт, сколько воды в баке А и сколько в баке Б
+    const share = Math.min(Math.max(parseFloat($('tankShare').value) || 50, 10), 90) / 100;
     // Режим PPM: цели берутся из профиля культуры как есть.
     // Режим EC: профиль масштабируется множителем k так, чтобы расчётный EC раствора совпал с заданным.
     const base = currentTargets();
@@ -745,7 +762,7 @@
       if (it.g > 0 && it.s.sol > 0) {
         const tank = tankOf(it);
         const others = items.some(x => x.g > 0 && tankOf(x) !== tank);
-        const vol = others ? V / 2 : V;
+        const vol = others ? V * (tank === 'A' ? share : 1 - share) : V;
         const gl = it.g / vol;
         if (gl > it.s.sol * 0.8) alerts.push({ l: 'bad',
           t: '<b>' + esc(it.s.name) + '</b>: ' + fmt(gl, 0) + ' г/л в баке ' + tank.replace('A', 'А').replace('B', 'Б') + ' при растворимости около ' + fmt(it.s.sol, 0) + ' г/л (20 °C). Соль может не раствориться. Увеличьте объём воды или выберите меньшую концентрацию.' });
@@ -825,19 +842,20 @@
     const inA = items.filter(it => it.g > 0 && tankOf(it) === 'A');
     const inB = items.filter(it => it.g > 0 && tankOf(it) === 'B');
     const both = inA.length > 0 && inB.length > 0;
-    const tankV = both ? V / 2 : V;
+    const tankA = both ? V * share : V;       // объём бака А, л
+    const tankB = both ? V * (1 - share) : V; // объём бака Б, л
     const list = arr => arr.map(it => esc(it.s.acc) + ' <b>' + fmt(it.g, 2) + ' г</b>').join(', ');
     const steps = [];
-    if (inA.length) steps.push('В <span class="pill a">бак А</span> (' + num(tankV) + ' л воды, около ' + (both ? 'половины' : 'всего') + ' объёма) растворите: ' + list(inA) + '. Перемешайте до полного растворения.');
-    if (inB.length) steps.push('В отдельной ёмкости (<span class="pill b">бак Б</span>, ' + num(tankV) + ' л воды) растворите: ' + list(inB) + '. Перемешайте до полного растворения.');
+    if (inA.length) steps.push('В <span class="pill a">бак А</span> (' + num(tankA) + ' л воды' + (both ? ', ' + fmt(share * 100, 0) + ' % объёма' : '') + ') растворите: ' + list(inA) + '. Перемешайте до полного растворения.');
+    if (inB.length) steps.push('В отдельной ёмкости (<span class="pill b">бак Б</span>, ' + num(tankB) + ' л воды) растворите: ' + list(inB) + '. Перемешайте до полного растворения.');
     if (!concentrate) {
       if (both) steps.push('Влейте раствор Б в бак А тонкой струёй при постоянном перемешивании.');
       steps.push('Доведите объём до <b>' + num(V) + ' л</b> и проверьте EC/ppm и pH.');
     } else {
-      if (both) steps.push('Доведите каждый бак до <b>' + num(tankV) + ' л</b>. <b>Концентраты А и Б не смешивайте</b>, храните раздельно.');
+      if (both) steps.push('Доведите бак А до <b>' + num(tankA) + ' л</b>, бак Б до <b>' + num(tankB) + ' л</b>. <b>Концентраты А и Б не смешивайте</b>, храните раздельно.');
       else steps.push('Доведите объём бака до <b>' + num(V) + ' л</b>.');
-      const ml = 1000 / F / (both ? 2 : 1);
-      steps.push('Для полива налейте в воду сначала ' + (both ? '<b>' + fmt(ml, 1) + ' мл</b> концентрата А на 1 л, перемешайте, затем <b>' + fmt(ml, 1) + ' мл</b> концентрата Б на 1 л' : '<b>' + fmt(ml, 1) + ' мл</b> концентрата на 1 л воды') + ' (разбавление 1:' + F + '). Из ' + num(V) + ' л концентрата получится ' + num(r.Vw) + ' л рабочего раствора.');
+      const mlA = 1000 / F * (both ? share : 1), mlB = 1000 / F * (1 - share);
+      steps.push('Для полива налейте в воду сначала ' + (both ? '<b>' + fmt(mlA, 1) + ' мл</b> концентрата А на 1 л, перемешайте, затем <b>' + fmt(mlB, 1) + ' мл</b> концентрата Б на 1 л' : '<b>' + fmt(mlA, 1) + ' мл</b> концентрата на 1 л воды') + ' (разбавление 1:' + F + '). Из ' + num(V) + ' л концентрата получится ' + num(r.Vw) + ' л рабочего раствора.');
       steps.push('Проверьте EC и pH рабочего раствора.');
     }
     if (!steps.length) steps.push('Ни одна соль не участвует в расчёте. Проверьте состав списка.');
@@ -848,31 +866,63 @@
     let doseText = '';
     let dosePanel = '';
     const irrV = parseFloat($('doseVol').value);
-    if (!concentrate) {
+    if (doseMode === 'direct') {
+      /* Раствор для полива сразу из солей: подбираем навески под нужный EC на объём полива */
+      if (!(irrV > 0) || !(doseEc > 0)) {
+        dosePanel = '<section class="panel"><h2>Сразу для полива</h2><p class="err">Укажите нужный раствор и объём воды для полива больше нуля.</p></section>';
+      } else {
+        const ecBase = (base.Ca / 20.04 + base.Mg / 12.15 + base.K / 39.1) / 10;
+        let sc = Math.min(Math.max(doseEc / ecBase, 0), 5);
+        let rd = solve({ V: irrV, F: 1, ppm: scaled(sc), fe: fe, water: water }, salts);
+        for (let i = 0; i < 8 && rd.ec > 0 && Math.abs(rd.ec - doseEc) > 0.005; i++) {
+          sc = Math.min(sc * doseEc / rd.ec, 5);
+          rd = solve({ V: irrV, F: 1, ppm: scaled(sc), fe: fe, water: water }, salts);
+        }
+        const used = rd.items.filter(it => it.g > 0);
+        const dA = used.filter(it => tankOf(it) === 'A'), dB = used.filter(it => tankOf(it) === 'B');
+        const bothD = dA.length > 0 && dB.length > 0;
+        const vA = bothD ? irrV * share : irrV, vB = bothD ? irrV * (1 - share) : irrV;
+        const listD = arr => arr.map(it => esc(it.s.acc) + ' <b>' + fmt(it.g, 2) + ' г</b>').join(', ');
+        const tgtD = mode === 'ec' ? fmt(doseEc, 2) + ' мСм/см' : fmt(doseEc * ppmScale(), 0) + ' ppm';
+        const rowsD = used.map(it => '<tr><td>' + esc(it.s.name) + '</td><td><span class="pill ' + (tankOf(it) === 'A' ? 'a' : 'b') + '">Бак ' + (tankOf(it) === 'A' ? 'А' : 'Б') + '</span></td><td class="num">' + fmt(it.g, 2) + '</td></tr>').join('');
+        const stepsD = [];
+        if (dA.length) stepsD.push('В <span class="pill a">бак А</span> (' + num(vA) + ' л воды) растворите: ' + listD(dA) + '.');
+        if (dB.length) stepsD.push('В отдельной ёмкости (<span class="pill b">бак Б</span>, ' + num(vB) + ' л воды) растворите: ' + listD(dB) + '.');
+        if (bothD) stepsD.push('Влейте раствор Б в бак А тонкой струёй при постоянном перемешивании.');
+        stepsD.push('Доведите объём до <b>' + num(irrV) + ' л</b>, проверьте EC и pH. Раствор готов к поливу.');
+        dosePanel = '<section class="panel" aria-labelledby="h-dosr"><h2 id="h-dosr">Сразу для полива: ' + tgtD + ', ' + num(irrV) + ' л</h2>' +
+          '<div class="tablewrap"><table><thead><tr><th>Соль</th><th>Бак</th><th class="num">Навеска, г</th></tr></thead><tbody>' + rowsD + '</tbody></table></div>' +
+          '<ol class="steps">' + stepsD.map(s => '<li>' + s + '</li>').join('') + '</ol>' +
+          '<p class="hint">Получится ' + showEc(rd.ec) + ' (N ' + fmt(rd.actPpm.N, 0) + ', P ' + fmt(rd.actPpm.P, 0) + ', K ' + fmt(rd.actPpm.K, 0) + ', Ca ' + fmt(rd.actPpm.Ca, 0) + ', Mg ' + fmt(rd.actPpm.Mg, 0) + ' ppm). Оценка по ионному составу, поэтому проверьте раствор прибором.</p>' +
+          (Math.abs(rd.ec - doseEc) > 0.05 ? '<div class="alert warn">Точно получить ' + tgtD + ' из этого набора солей не удалось. Расчётное значение: ' + showEc(rd.ec) + '. Проверьте набор солей.</div>' : '') + '</section>';
+        doseText = '\n\nСразу для полива ' + tgtD + ', ' + num(irrV) + ' л:\n' + used.map(it => '- ' + it.s.name + ' (бак ' + (tankOf(it) === 'A' ? 'А' : 'Б') + '): ' + fmt(it.g, 2) + ' г').join('\n');
+      }
+    } else if (!concentrate) {
       dosePanel = '<section class="panel"><h2>Полив из концентрата</h2><p class="hint">Выберите маточный раствор 1:100 или 1:200, и здесь появится дозировка в миллилитрах.</p></section>';
     } else if (!(irrV > 0) || !(doseEc > 0) || !(r.ec > 0)) {
       dosePanel = '<section class="panel"><h2>Полив из концентрата</h2><p class="err">Укажите нужный раствор и объём воды для полива больше нуля.</p></section>';
     } else {
       const k = doseEc / r.ec;
       const mlL = 1000 / F * k;                 // мл смешанного концентрата на 1 л воды для полива
-      const split = both ? 2 : 1;               // при двух баках половина из А и половина из Б
-      const perTank = mlL / split;
-      const tot = perTank * irrV;
+      // При двух баках мл делятся по долям объёма баков: мл А = мл × доля А, мл Б = мл × (1 − доля А)
+      const mlA = both ? mlL * share : mlL, mlB = both ? mlL * (1 - share) : 0;
+      const perTank = mlA;
+      const tot = mlA * irrV, totB = mlB * irrV;
       const tgtTxt = mode === 'ec' ? fmt(doseEc, 2) + ' мСм/см' : fmt(doseEc * ppmScale(), 0) + ' ppm';
       const tooStrong = mlL > 1000;
       const lines = both
         ? '<div class="metric"><span class="pill a">Концентрат А</span><b>' + fmt(perTank, 1) + ' мл/л</b><small>на ' + num(irrV) + ' л воды: <b>' + fmt(tot, 1) + ' мл</b></small></div>' +
-          '<div class="metric"><span class="pill b">Концентрат Б</span><b>' + fmt(perTank, 1) + ' мл/л</b><small>на ' + num(irrV) + ' л воды: <b>' + fmt(tot, 1) + ' мл</b></small></div>'
+          '<div class="metric"><span class="pill b">Концентрат Б</span><b>' + fmt(mlB, 1) + ' мл/л</b><small>на ' + num(irrV) + ' л воды: <b>' + fmt(totB, 1) + ' мл</b></small></div>'
         : '<div class="metric"><span>Концентрат</span><b>' + fmt(perTank, 1) + ' мл/л</b><small>на ' + num(irrV) + ' л воды: <b>' + fmt(tot, 1) + ' мл</b></small></div>';
       dosePanel = '<section class="panel" aria-labelledby="h-dosr"><h2 id="h-dosr">Полив из концентрата: ' + tgtTxt + '</h2>' +
         '<div class="metrics">' + lines + '</div>' +
         '<ol class="steps"><li>Налейте в ёмкость ' + num(irrV) + ' л воды.</li>' +
-        (both ? '<li>Добавьте <b>' + fmt(tot, 1) + ' мл</b> концентрата А и перемешайте.</li><li>Затем добавьте <b>' + fmt(tot, 1) + ' мл</b> концентрата Б и перемешайте. Концентраты А и Б не смешивайте друг с другом в чистом виде.</li>'
+        (both ? '<li>Добавьте <b>' + fmt(tot, 1) + ' мл</b> концентрата А и перемешайте.</li><li>Затем добавьте <b>' + fmt(totB, 1) + ' мл</b> концентрата Б и перемешайте. Концентраты А и Б не смешивайте друг с другом в чистом виде.</li>'
               : '<li>Добавьте <b>' + fmt(tot, 1) + ' мл</b> концентрата и перемешайте.</li>') +
         '<li>Проверьте EC и pH. Цель: ' + tgtTxt + '.</li></ol>' +
         (tooStrong ? '<div class="alert bad">Нужна доза больше 1000 мл на литр: такой раствор из этого концентрата не получить. Выберите более крепкий концентрат или меньшую цель.</div>' : '') +
         '<p class="hint">Расчёт по оценке EC раствора и без учёта собственных солей воды для полива. Цель в ppm пересчитывается по шкале ' + ppmScale() + '. Рабочий раствор из этого концентрата при разбавлении 1:' + F + ' даёт ' + showEc(r.ec) + '.</p></section>';
-      doseText = '\n\nПолив ' + tgtTxt + ', ' + num(irrV) + ' л воды: ' + (both ? 'концентрат А ' + fmt(tot, 1) + ' мл, концентрат Б ' + fmt(tot, 1) + ' мл' : 'концентрат ' + fmt(tot, 1) + ' мл') + ' (' + fmt(perTank, 1) + ' мл/л' + (both ? ' каждого' : '') + ')';
+      doseText = '\n\nПолив ' + tgtTxt + ', ' + num(irrV) + ' л воды: ' + (both ? 'концентрат А ' + fmt(tot, 1) + ' мл, концентрат Б ' + fmt(totB, 1) + ' мл' : 'концентрат ' + fmt(tot, 1) + ' мл') + ' (' + (both ? fmt(mlA, 1) + ' мл/л из А, ' + fmt(mlB, 1) + ' мл/л из Б' : fmt(perTank, 1) + ' мл/л') + ')';
     }
 
     // Текст рецепта для кнопки «Копировать»
@@ -980,7 +1030,7 @@
       localStorage.setItem(STORE, JSON.stringify({
         crop: $('crop').value, stage: $('stage').value, volume: $('volume').value,
         dilution: $('dilution').value, fe: $('feTarget').value, wCa: $('wCa').value, wMg: $('wMg').value, wN: $('wN').value,
-        mode: mode, scale: $('ppmScale').value, doseEc: doseEc, doseVol: $('doseVol').value, ec: $('ecTarget').value, ecTouched: ecTouched, saltsTouched: saltsTouched, salts: salts
+        mode: mode, scale: $('ppmScale').value, doseEc: doseEc, doseVol: $('doseVol').value, doseMode: doseMode, tankShare: $('tankShare').value, ec: $('ecTarget').value, ecTouched: ecTouched, saltsTouched: saltsTouched, salts: salts
       }));
     } catch (e) { /* хранилище недоступно: работаем без сохранения */ }
   }
@@ -996,6 +1046,8 @@
       if (d.mode === 'ec') mode = 'ec';
       if (parseFloat(d.doseEc) > 0) doseEc = parseFloat(d.doseEc);
       if (parseFloat(d.doseVol) > 0) $('doseVol').value = d.doseVol;
+      if (d.doseMode === 'direct') doseMode = 'direct';
+      if (parseFloat(d.tankShare) >= 10 && parseFloat(d.tankShare) <= 90) $('tankShare').value = d.tankShare;
       if (['500', '640', '700'].indexOf(String(d.scale)) >= 0) $('ppmScale').value = String(d.scale);
       saltsTouched = !!d.saltsTouched;
       if (d.ecTouched && parseFloat(d.ec) > 0) { ecTouched = true; $('ecTarget').value = d.ec; }
@@ -1038,6 +1090,7 @@
   $('stage').value = 'veg';
   load();
   setMode(mode);
+  setDoseMode(doseMode);
   installIcon();
   if (!saltsTouched || !salts.length) applyKit(); else { renderSalts(); updateKitInfo(); }
   renderRecipes();
@@ -1090,6 +1143,11 @@
   $('ppmScale').addEventListener('change', function () { readDoseInput(); refresh(); renderRecipes(); });
   $('doseTarget').addEventListener('input', function () { readDoseInput(); refresh(); });
   $('doseVol').addEventListener('input', refresh);
+  $('tankShare').addEventListener('input', refresh);
+  $('doseSeg').addEventListener('click', function (e) {
+    const b = e.target.closest('button[data-dose]');
+    if (b) { setDoseMode(b.dataset.dose); refresh(); }
+  });
   ['volume', 'dilution', 'feTarget', 'wCa', 'wMg', 'wN'].forEach(id => $(id).addEventListener('input', function () { updateKitInfo(); refresh(); }));
   $('presets').addEventListener('click', function (e) {
     const b = e.target.closest('button[data-vol]');
